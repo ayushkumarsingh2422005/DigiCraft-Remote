@@ -2,8 +2,8 @@
 
 This project has 2 scripts:
 
-- `screen_sender.py` -> captures your screen and sends video frames
-- `screen_receiver.py` -> receives frames and shows live screen
+- `screen_sender.py` -> captures your screen and sends video frames (+ optionally accepts remote control)
+- `screen_receiver.py` -> receives frames, shows live screen, and can send mouse/keyboard control events
 
 Works on Windows.  
 Can run on same Wi-Fi/LAN or over global internet.
@@ -28,7 +28,7 @@ pip install -r requirements.txt
 
 - `screen_sender.py` - run on the PC that shares screen
 - `screen_receiver.py` - run on the PC that watches screen
-- `requirements.txt` - dependencies (`opencv-python`, `mss`, `numpy`)
+- `requirements.txt` - dependencies (`opencv-python`, `mss`, `numpy`, `pyautogui`)
 
 ---
 
@@ -98,7 +98,32 @@ Note: If receiver uses CGNAT/double NAT, port forwarding may fail. In that case 
 
 ---
 
-## 5) Sender Options
+## 5) Full Remote Control Mode (Mouse + Keyboard)
+
+For "real remote desktop style" control, run with control flags on both sides.
+
+### Sender (the PC being controlled)
+
+```bash
+python screen_sender.py --host <receiver_ip> --port 9999 --allow-control --token mysecret
+```
+
+### Receiver (the PC controlling remotely)
+
+```bash
+python screen_receiver.py --host 0.0.0.0 --port 9999 --control --token mysecret
+```
+
+Important:
+
+- `--token` must match on both sides
+- Keyboard works when receiver video window is focused
+- Press `q` in receiver window to quit
+- Move mouse to top-left corner on sender PC to trigger PyAutoGUI fail-safe
+
+---
+
+## 6) Sender Options
 
 ```bash
 python screen_sender.py --host <ip> --port 9999 --fps 12 --quality 65 --scale 1.0 --monitor 1
@@ -119,14 +144,14 @@ python screen_sender.py --host 100.64.20.5 --port 9999 --fps 10 --quality 55 --s
 
 ---
 
-## 6) Stop Streaming
+## 7) Stop Streaming
 
 - Receiver: focus video window and press `q`
 - Sender: press `Ctrl + C`
 
 ---
 
-## 7) Troubleshooting
+## 8) Troubleshooting
 
 ### Connection refused / timeout
 
@@ -152,7 +177,7 @@ python screen_sender.py --host <ip> --fps 8 --quality 45 --scale 0.6
 
 ---
 
-## 8) Security Note
+## 9) Security Note
 
-Current version is basic TCP stream with no authentication/encryption.
-Use only with trusted users/networks. For stronger security, add auth token + TLS.
+Current version supports basic token check (`--token`) but does not use transport encryption.
+For sensitive use, run through Tailscale or VPN and use a strong token.

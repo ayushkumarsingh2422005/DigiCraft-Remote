@@ -1,4 +1,5 @@
 import argparse
+import json
 import socket
 import struct
 
@@ -21,6 +22,16 @@ def parse_args() -> argparse.Namespace:
         default=9999,
         help="Port to listen on (default: 9999)",
     )
+    parser.add_argument(
+        "--token",
+        default="",
+        help="Optional shared token (must match sender token)",
+    )
+    parser.add_argument(
+        "--control",
+        action="store_true",
+        help="Send mouse/keyboard events to sender (requires sender --allow-control)",
+    )
     return parser.parse_args()
 
 
@@ -32,6 +43,19 @@ def recv_exact(sock: socket.socket, size: int) -> bytes:
             raise ConnectionError("Connection closed while receiving data.")
         buf.extend(chunk)
     return bytes(buf)
+
+
+def send_packet(sock: socket.socket, packet_type: bytes, payload: bytes) -> None:
+    sock.sendall(packet_type + struct.pack("!I", len(payload)))
+    sock.sendall(payload)
+
+
+def recv_packet(sock: socket.socket) -> tuple[bytes, bytes]:
+    header = recv_exact(sock, 5)
+    packet_type = header[:1]
+    (size,) = struct.unpack("!I", header[1:])
+    payload = recv_exact(sock, size)
+    return packet_type, payload
 
 
 def main() -> None:
@@ -47,14 +71,118 @@ def main() -> None:
     print(f"Connected by {addr[0]}:{addr[1]}")
     print("Press 'q' in the video window to quit.")
 
+    packet_type, payload = recv_packet(conn)
+    if packet_type != b"I":
+        conn.close()
+        server.close()
+        raise RuntimeError("Invalid handshake from sender.")
+
+    hello = json.loads(payload.decode("utf-8"))
+    remote_width = int(hello.get("monitor_width", 1920))
+    remote_height = int(hello.get("monitor_height", 1080))
+    remote_allows_control = bool(hello.get("allow_control", False))
+    remote_token = str(hello.get("token", ""))
+
+    if args.token != remote_token:
+        conn.close()
+        server.close()
+        raise RuntimeError("Token mismatch. Set same --token on sender and receiver.")
+
+    control_enabled = bool(args.control and remote_allows_control)
+    print(f"Remote monitor: {remote_width}x{remote_height}")
+    if args.control and not remote_allows_control:
+        print("Receiver requested control but sender did not enable --allow-control.")
+    print(f"Control active: {'yes' if control_enabled else 'no'}")
+    print("Focus video window for keyboard control.")
+
     window_name = "Remote Screen"
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+    last_mouse_pos = [0, 0]
+
+    def to_remote_coords(x: int, y: int) -> tuple[int, int]:
+        try:
+            _, _, w, h = cv2.getWindowImageRect(window_name)
+        except cv2.error:
+            w, h = remote_width, remote_height
+        if w <= 0 or h <= 0:
+            w, h = remote_width, remote_height
+        rx = int(max(0, min(remote_width - 1, (x / w) * remote_width)))
+        ry = int(max(0, min(remote_height - 1, (y / h) * remote_height)))
+        return rx, ry
+
+    def send_control(event: dict) -> None:
+        if not control_enabled:
+            return
+        send_packet(conn, b"C", json.dumps(event).encode("utf-8"))
+
+    def on_mouse(event: int, x: int, y: int, flags: int, param: object) -> None:
+        rx, ry = to_remote_coords(x, y)
+        last_mouse_pos[0] = rx
+        last_mouse_pos[1] = ry
+
+        if event == cv2.EVENT_MOUSEMOVE:
+            send_control({"type": "mouse_move", "x": rx, "y": ry})
+        elif event == cv2.EVENT_LBUTTONDOWN:
+            send_control(
+                {"type": "mouse_click", "action": "down", "button": "left", "x": rx, "y": ry}
+            )
+        elif event == cv2.EVENT_LBUTTONUP:
+            send_control(
+                {"type": "mouse_click", "action": "up", "button": "left", "x": rx, "y": ry}
+            )
+        elif event == cv2.EVENT_RBUTTONDOWN:
+            send_control(
+                {
+                    "type": "mouse_click",
+                    "action": "down",
+                    "button": "right",
+                    "x": rx,
+                    "y": ry,
+                }
+            )
+        elif event == cv2.EVENT_RBUTTONUP:
+            send_control(
+                {"type": "mouse_click", "action": "up", "button": "right", "x": rx, "y": ry}
+            )
+        elif event == cv2.EVENT_MBUTTONDOWN:
+            send_control(
+                {
+                    "type": "mouse_click",
+                    "action": "down",
+                    "button": "middle",
+                    "x": rx,
+                    "y": ry,
+                }
+            )
+        elif event == cv2.EVENT_MBUTTONUP:
+            send_control(
+                {
+                    "type": "mouse_click",
+                    "action": "up",
+                    "button": "middle",
+                    "x": rx,
+                    "y": ry,
+                }
+            )
+        elif event == cv2.EVENT_MOUSEWHEEL:
+            amount = 240 if flags > 0 else -240
+            send_control({"type": "mouse_scroll", "amount": amount})
+
+    cv2.setMouseCallback(window_name, on_mouse)
+
+    key_map = {
+        8: "backspace",
+        9: "tab",
+        13: "enter",
+        27: "esc",
+        32: "space",
+    }
 
     try:
         while True:
-            header = recv_exact(conn, 4)
-            (frame_size,) = struct.unpack("!I", header)
-            payload = recv_exact(conn, frame_size)
+            packet_type, payload = recv_packet(conn)
+            if packet_type != b"F":
+                continue
 
             img_array = np.frombuffer(payload, dtype=np.uint8)
             frame = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
@@ -62,8 +190,15 @@ def main() -> None:
                 continue
 
             cv2.imshow(window_name, frame)
-            if (cv2.waitKey(1) & 0xFF) == ord("q"):
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord("q"):
                 break
+            if control_enabled and key != 255:
+                if key in key_map:
+                    send_control({"type": "key", "action": "press", "key": key_map[key]})
+                elif 32 <= key <= 126:
+                    # Printable ASCII keys.
+                    send_control({"type": "type_text", "text": chr(key)})
     except (ConnectionError, OSError) as exc:
         print(f"Connection ended: {exc}")
     finally:
