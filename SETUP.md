@@ -6,6 +6,7 @@ Project scripts:
 
 - `screen_sender.py` -> run on the PC being shared
 - `screen_receiver.py` -> run on the PC that watches/controls
+- `sender_gui.py` -> optional basic UI wrapper for sender
 
 ---
 
@@ -16,7 +17,7 @@ On both PCs:
 - Windows 10/11
 - Python 3.9 or newer
 - Internet connection
-- Same project files (`screen_sender.py`, `screen_receiver.py`, `requirements.txt`)
+- Same project files (`screen_sender.py`, `screen_receiver.py`, `sender_gui.py`, `requirements.txt`)
 
 Check Python:
 
@@ -44,7 +45,38 @@ Dependencies used:
 
 ---
 
-## 3) Decide Network Method
+## 3) Optional: Build Sender EXE (UI App)
+
+If you want sender to run from a basic UI and launch in background without typing flags:
+
+1. Keep `sender_gui.py` and `screen_sender.py` in the same folder.
+2. Install PyInstaller on sender PC:
+
+```bash
+pip install pyinstaller
+```
+
+3. Build EXE:
+
+```bash
+pyinstaller --onefile --windowed sender_gui.py
+```
+
+4. Use generated file:
+
+```text
+dist/sender_gui.exe
+```
+
+Notes:
+
+- `sender_gui.exe` starts/stops `screen_sender.py` in background.
+- Receiver side has no change.
+- If you move the EXE, keep `screen_sender.py` beside it.
+
+---
+
+## 4) Decide Network Method
 
 To connect from different places (different routers), use one of:
 
@@ -66,7 +98,7 @@ To connect from different places (different routers), use one of:
 
 ---
 
-## 4) Choose Features to Share
+## 5) Choose Features to Share
 
 Both scripts use:
 
@@ -88,7 +120,7 @@ Important:
 
 ---
 
-## 5) First-Time Full Setup (All Features)
+## 6) First-Time Full Setup (All Features)
 
 Use a token (password-style string), example: `mysecret`.
 
@@ -111,7 +143,7 @@ Replace `<receiver_ip>` with:
 
 ---
 
-## 6) Common Ready-to-Use Modes
+## 7) Common Ready-to-Use Modes
 
 ### Full remote desktop
 
@@ -157,7 +189,7 @@ mouse,keyboard
 
 ---
 
-## 7) Performance Tuning (Sender Side)
+## 8) Performance Tuning (Sender Side)
 
 Video quality/speed options:
 
@@ -187,7 +219,7 @@ python screen_sender.py --host <receiver_ip> --port 9999 --token mysecret --cont
 
 ---
 
-## 8) Audio Settings (Sender Side)
+## 9) Audio Settings (Sender Side)
 
 Audio options:
 
@@ -225,7 +257,7 @@ python -c "import sounddevice as sd; print(sd.query_devices())"
 
 ---
 
-## 9) Verify It Works
+## 10) Verify It Works
 
 After both scripts are running:
 
@@ -238,7 +270,7 @@ After both scripts are running:
 
 ---
 
-## 10) Stop and Safety
+## 11) Stop and Safety
 
 - Press `q` on receiver video window to stop.
 - Press `Ctrl + C` in sender terminal to stop.
@@ -247,7 +279,7 @@ After both scripts are running:
 
 ---
 
-## 11) Troubleshooting
+## 12) Troubleshooting
 
 ### Connection error / timeout
 
@@ -274,7 +306,7 @@ After both scripts are running:
 
 ---
 
-## 12) Minimal Quick Start
+## 13) Minimal Quick Start
 
 Receiver:
 
