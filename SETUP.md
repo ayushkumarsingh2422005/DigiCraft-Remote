@@ -80,6 +80,7 @@ Available feature names:
 - `mouse` -> remote mouse control
 - `keyboard` -> remote keyboard control
 - `mic` -> sender microphone audio
+- `system_audio` -> sender speaker/output audio (Windows loopback)
 
 Important:
 
@@ -136,6 +137,12 @@ screen
 screen,mic
 ```
 
+### Screen + system audio only
+
+```text
+screen,system_audio
+```
+
 ### Input only
 
 ```text
@@ -180,6 +187,7 @@ Audio options:
 
 - `--audio-rate` (default `48000`)
 - `--audio-channels` (default `1`)
+- `--system-audio-device` (optional output device index for loopback)
 
 Examples:
 
@@ -189,6 +197,14 @@ python screen_sender.py --host <receiver_ip> --port 9999 --token mysecret --cont
 
 ```bash
 python screen_sender.py --host <receiver_ip> --port 9999 --token mysecret --control screen,mic --audio-rate 44100 --audio-channels 2
+```
+
+```bash
+python screen_sender.py --host <receiver_ip> --port 9999 --token mysecret --control screen,system_audio --audio-rate 48000 --audio-channels 2
+```
+
+```bash
+python screen_sender.py --host <receiver_ip> --port 9999 --token mysecret --control screen,system_audio --audio-rate 48000 --audio-channels 2 --system-audio-device 5
 ```
 
 ---
@@ -201,6 +217,7 @@ After both scripts are running:
 - Moving/clicking mouse on receiver should move sender pointer (if `mouse` enabled).
 - Typing in receiver window should type on sender (if `keyboard` enabled).
 - Receiver should hear sender mic input (if `mic` enabled).
+- Receiver should hear sender system sound (if `system_audio` enabled).
 
 ---
 
@@ -230,9 +247,12 @@ After both scripts are running:
 
 ### Audio not working
 
-- Ensure `mic` is included in `--control` on both sides.
+- Ensure `mic` or `system_audio` is included in `--control` on both sides.
 - Try `--audio-rate 44100`.
 - Check microphone permission and device availability.
+- For system audio, prefer `--audio-channels 2`.
+- If needed, set `--system-audio-device` to the speaker/output device index.
+- Do not enable both `mic` and `system_audio` together on sender.
 
 ---
 

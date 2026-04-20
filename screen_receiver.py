@@ -39,7 +39,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def parse_feature_flags(raw: str) -> set[str]:
-    allowed = {"screen", "mouse", "keyboard", "mic"}
+    allowed = {"screen", "mouse", "keyboard", "mic", "system_audio"}
     selected = {item.strip().lower() for item in raw.split(",") if item.strip()}
     unknown = selected - allowed
     if unknown:
@@ -99,6 +99,7 @@ def main() -> None:
     remote_features = set(hello.get("enabled_features", []))
     remote_token = str(hello.get("token", ""))
     remote_audio_enabled = bool(hello.get("audio_enabled", False))
+    remote_audio_source = str(hello.get("audio_source", "none"))
     remote_audio_rate = int(hello.get("audio_rate", 48000))
     remote_audio_channels = int(hello.get("audio_channels", 1))
 
@@ -110,13 +111,25 @@ def main() -> None:
     use_mouse = "mouse" in local_features and "mouse" in remote_features
     use_keyboard = "keyboard" in local_features and "keyboard" in remote_features
     use_screen = "screen" in local_features and "screen" in remote_features
-    use_mic = "mic" in local_features and "mic" in remote_features and remote_audio_enabled
+    wants_mic = "mic" in local_features and "mic" in remote_features
+    wants_system_audio = (
+        "system_audio" in local_features and "system_audio" in remote_features
+    )
+    use_audio = bool(
+        remote_audio_enabled
+        and (
+            (remote_audio_source == "mic" and wants_mic)
+            or (remote_audio_source == "system_audio" and wants_system_audio)
+        )
+    )
     control_enabled = bool(use_mouse or use_keyboard)
     print(f"Remote monitor: {remote_width}x{remote_height}")
     print(f"Sender features: {', '.join(sorted(remote_features))}")
     print(f"Control active: {'yes' if control_enabled else 'no'}")
-    audio_play_enabled = bool(use_mic)
+    audio_play_enabled = bool(use_audio)
     print(f"Audio active: {'yes' if audio_play_enabled else 'no'}")
+    if remote_audio_enabled:
+        print(f"Sender audio source: {remote_audio_source}")
     print("Focus video window for keyboard control.")
 
     window_name = "Remote Screen"

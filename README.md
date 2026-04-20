@@ -4,6 +4,7 @@ Simple Python remote share for Windows with:
 - Screen streaming
 - Mouse + keyboard remote control
 - Microphone audio streaming
+- System audio streaming (speaker output loopback)
 - Feature toggle system via `--control`
 
 This project has:
@@ -24,6 +25,7 @@ pip install -r requirements.txt
 - **Mouse**: move/click/scroll remote pointer
 - **Keyboard**: send key presses to sender PC
 - **Mic**: stream sender microphone audio to receiver
+- **System Audio**: stream sender speaker output to receiver (Windows WASAPI loopback)
 - **Token**: basic shared access token check
 - **Precision pointer mapping**: DPI-aware sender cursor placement
 
@@ -35,6 +37,7 @@ Both scripts use `--control` with comma-separated values:
 - `mouse`
 - `keyboard`
 - `mic`
+- `system_audio`
 
 Example:
 
@@ -111,7 +114,19 @@ Sender:
 python screen_sender.py --host <receiver_ip> --port 9999 --token mysecret --control screen,mic
 ```
 
-### E) Input only (mouse + keyboard, no screen/mic)
+### E) Screen + system audio only
+
+Receiver:
+```bash
+python screen_receiver.py --host 0.0.0.0 --port 9999 --token mysecret --control screen,system_audio
+```
+
+Sender:
+```bash
+python screen_sender.py --host <receiver_ip> --port 9999 --token mysecret --control screen,system_audio
+```
+
+### F) Input only (mouse + keyboard, no screen/audio)
 
 Receiver:
 ```bash
@@ -148,11 +163,25 @@ python screen_sender.py --host <receiver_ip> --port 9999 --token mysecret --cont
 
 ## 7) Audio Settings Examples
 
-### Default audio
+### Default mic audio
 
 Sender:
 ```bash
 python screen_sender.py --host <receiver_ip> --port 9999 --token mysecret --control screen,mic --audio-rate 48000 --audio-channels 1
+```
+
+### System audio (speaker output)
+
+Sender:
+```bash
+python screen_sender.py --host <receiver_ip> --port 9999 --token mysecret --control screen,system_audio --audio-rate 48000 --audio-channels 2
+```
+
+### System audio with explicit output device index
+
+Sender:
+```bash
+python screen_sender.py --host <receiver_ip> --port 9999 --token mysecret --control screen,system_audio --audio-rate 48000 --audio-channels 2 --system-audio-device 5
 ```
 
 ### 44.1 kHz audio
@@ -183,6 +212,7 @@ python screen_sender.py --host <receiver_ip> --port 9999 --token mysecret --cont
 - `--scale` (default `1.0`): resize factor before sending
 - `--audio-rate` (default `48000`): mic sample rate
 - `--audio-channels` (default `1`): mic channels
+- `--system-audio-device` (default auto): output device index for system audio loopback
 
 ### `screen_receiver.py`
 
@@ -198,3 +228,5 @@ python screen_sender.py --host <receiver_ip> --port 9999 --token mysecret --cont
 - For best pointer precision, keep sender display scaling stable during session.
 - If connection fails over internet, use Tailscale or correct port forwarding.
 - If audio fails, try `--audio-rate 44100`.
+- For `system_audio`, use `--audio-channels 2` and optionally set `--system-audio-device`.
+- Do not enable both `mic` and `system_audio` at the same time on sender.

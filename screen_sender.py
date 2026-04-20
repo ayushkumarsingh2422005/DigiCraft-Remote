@@ -64,7 +64,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--control",
         default="screen,mouse,keyboard",
-        help="Comma-separated features to share: screen,mouse,keyboard,mic",
+        help="Comma-separated features to share: screen,mouse,keyboard,mic,system_audio",
     )
     parser.add_argument(
         "--token",
@@ -83,11 +83,17 @@ def parse_args() -> argparse.Namespace:
         default=1,
         help="Audio channels (default: 1)",
     )
+    parser.add_argument(
+        "--system-audio-device",
+        type=int,
+        default=None,
+        help="Optional output device index for system audio loopback",
+    )
     return parser.parse_args()
 
 
 def parse_feature_flags(raw: str) -> set[str]:
-    allowed = {"screen", "mouse", "keyboard", "mic"}
+    allowed = {"screen", "mouse", "keyboard", "mic", "system_audio"}
     selected = {item.strip().lower() for item in raw.split(",") if item.strip()}
     unknown = selected - allowed
     if unknown:
@@ -221,6 +227,8 @@ def audio_streamer(
     stop_event: threading.Event,
     sample_rate: int,
     channels: int,
+    source: str,
+    system_audio_device: int | None,
 ) -> None:
     blocksize = 1024
     max_queue_chunks = 60
@@ -246,13 +254,21 @@ def audio_streamer(
                 pass
 
     try:
-        with sd.RawInputStream(
-            samplerate=sample_rate,
-            channels=channels,
-            dtype="int16",
-            blocksize=blocksize,
-            callback=on_audio,
-        ):
+        stream_kwargs = {
+            "samplerate": sample_rate,
+            "channels": channels,
+            "dtype": "int16",
+            "blocksize": blocksize,
+            "callback": on_audio,
+        }
+        if source == "system_audio":
+            # On Windows, capture speaker output via WASAPI loopback.
+            wasapi = sd.WasapiSettings(loopback=True)
+            if system_audio_device is not None:
+                stream_kwargs["device"] = system_audio_device
+            stream_kwargs["extra_settings"] = wasapi
+
+        with sd.RawInputStream(**stream_kwargs):
             while not stop_event.is_set():
                 try:
                     chunk = audio_queue.get(timeout=0.2)
@@ -269,8 +285,11 @@ def main() -> None:
     features = parse_feature_flags(args.control)
     share_screen = "screen" in features
     share_mic = "mic" in features
+    share_system_audio = "system_audio" in features
     allow_mouse_control = "mouse" in features
     allow_keyboard_control = "keyboard" in features
+    if share_mic and share_system_audio:
+        raise ValueError("Select only one audio source: mic OR system_audio.")
     jpeg_quality = max(1, min(100, args.quality))
     frame_interval = 1.0 / max(1.0, args.fps)
     pyautogui.FAILSAFE = True
@@ -297,7 +316,8 @@ def main() -> None:
             "monitor_height": int(monitor["height"]),
             "enabled_features": sorted(features),
             "token": args.token,
-            "audio_enabled": bool(share_mic),
+            "audio_enabled": bool(share_mic or share_system_audio),
+            "audio_source": "system_audio" if share_system_audio else ("mic" if share_mic else "none"),
             "audio_rate": int(args.audio_rate),
             "audio_channels": int(args.audio_channels),
         }
@@ -323,7 +343,7 @@ def main() -> None:
         listener_thread.start()
 
         audio_thread = None
-        if share_mic:
+        if share_mic or share_system_audio:
             audio_thread = threading.Thread(
                 target=audio_streamer,
                 args=(
@@ -332,12 +352,15 @@ def main() -> None:
                     stop_event,
                     int(args.audio_rate),
                     int(args.audio_channels),
+                    "system_audio" if share_system_audio else "mic",
+                    args.system_audio_device,
                 ),
                 daemon=True,
             )
             audio_thread.start()
             print(
-                f"Audio streaming enabled: {int(args.audio_rate)} Hz, {int(args.audio_channels)} channel(s)."
+                f"Audio streaming enabled ({'system' if share_system_audio else 'mic'}): "
+                f"{int(args.audio_rate)} Hz, {int(args.audio_channels)} channel(s)."
             )
 
         try:
