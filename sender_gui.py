@@ -2,8 +2,9 @@ import subprocess
 import sys
 import threading
 import tkinter as tk
-from pathlib import Path
 from tkinter import messagebox
+
+import screen_sender
 
 
 class SenderGUI:
@@ -14,8 +15,6 @@ class SenderGUI:
         self.process: subprocess.Popen | None = None
         self.reader_thread: threading.Thread | None = None
         self.output_lines = 0
-
-        self.sender_script_path = Path(__file__).with_name("screen_sender.py")
 
         self.host_var = tk.StringVar()
         self.port_var = tk.StringVar(value="9999")
@@ -83,9 +82,7 @@ class SenderGUI:
         if not self.host_var.get().strip():
             raise ValueError("Receiver Host/IP is required.")
 
-        cmd = [
-            sys.executable,
-            str(self.sender_script_path),
+        sender_args = [
             "--host",
             self.host_var.get().strip(),
             "--port",
@@ -109,9 +106,14 @@ class SenderGUI:
         ]
 
         if self.system_audio_device_var.get().strip():
-            cmd.extend(["--system-audio-device", self.system_audio_device_var.get().strip()])
+            sender_args.extend(["--system-audio-device", self.system_audio_device_var.get().strip()])
 
-        return cmd
+        # In bundled EXE mode, launch this same EXE with --run-sender.
+        if getattr(sys, "frozen", False):
+            return [sys.executable, "--run-sender", *sender_args]
+
+        # In script mode, launch this script with --run-sender using python.
+        return [sys.executable, __file__, "--run-sender", *sender_args]
 
     def _read_process_output(self) -> None:
         assert self.process is not None
@@ -134,10 +136,6 @@ class SenderGUI:
     def start_sender(self) -> None:
         if self.process is not None and self.process.poll() is None:
             messagebox.showinfo("Already Running", "Sender is already running.")
-            return
-
-        if not self.sender_script_path.exists():
-            messagebox.showerror("Missing File", f"Cannot find: {self.sender_script_path}")
             return
 
         try:
@@ -195,6 +193,12 @@ class SenderGUI:
 
 
 def main() -> None:
+    if len(sys.argv) > 1 and sys.argv[1] == "--run-sender":
+        # Forward all remaining args to screen_sender.
+        sys.argv = ["screen_sender.py", *sys.argv[2:]]
+        screen_sender.main()
+        return
+
     root = tk.Tk()
     SenderGUI(root)
     root.mainloop()
